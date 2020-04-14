@@ -2,7 +2,7 @@ Working of Elastic Search
 
 *****************************************************************************
 
-Routing
+1. Routing
 
 Deafult routing : Given a search query it uses the following formula to get to the exact shard 
 
@@ -15,14 +15,14 @@ shard_num = hash(_routing) % num_of_primary_shards
 
 *****************************************************************************
 
-How ES reads data?
+2. How ES reads data?
 
 GET <command> --> Coordinating node (Node having doc) --> Routing --> Selects the shard amomg the available shards ARS (Adaptive replica selection) --> read request from coordinating node sends the result to Kibana / ES deployment sdk
 
 
 *****************************************************************************
 
-How ES write works?
+3. How ES write works?
 
 PUT <command> --> 1. Write request is sent to the primary shard by coordinating node
 				  2. The primary shard validates the request (type, doc etc)
@@ -47,3 +47,161 @@ Global checkpoint - For each replication group - The sequence number that all ac
 Local checkpoint - For each replica shard - The sequence number for the last write operation performed
 
 *****************************************************************************
+
+4. Document Versioning
+
+ ES versions the documents that we index but only stores the most recent version of the document
+ 	- i.e We cannot go back to other versions of the document (No revision history)
+ 	- maintains _version (a integer) that starts at 1 and is increemented each time when document is modified
+ 	- this is the default type and is called internal versioning
+
+ External Versioning
+ 	- useful when versions are maintanined outside ES eg: When stored in RDBMS
+ 	- not used anymore since primary terms & sequence numbers are used nowadays
+
+ *****************************************************************************
+
+5. Concurrency Control (primary terms & sequence numbers are used)
+
+
+Update the in_stock field only if the document has not been updated since retrieving it
+
+POST /products/_update/100?if_primary_term=X&if_seq_no=X
+{
+  "doc": {
+    "in_stock": 123
+  }
+}
+
+How to handle?
+
+Handle it in the application level by 
+
+1. Retrive the document again
+2. Use _primary_term & _seq_no again for new update request
+
+*****************************************************************************
+
+6.1 Updating documents matching a query
+
+Replace the match_all query with any query that you would like.
+
+POST /products/_update_by_query
+{
+  "script": {
+    "source": "ctx._source.in_stock--"
+  },
+  "query": {
+    "match_all": {}
+  }
+}
+
+6.2 Ignoring (counting) version conflicts
+
+The conflicts key may be added as a query parameter instead, i.e. ?conflicts=proceed.
+
+POST /products/_update_by_query
+{
+  "conflicts": "proceed",
+  "script": {
+    "source": "ctx._source.in_stock--"
+  },
+  "query": {
+    "match_all": {}
+  }
+}
+
+6.3 Matches all of the documents within the products index
+
+GET /products/_search
+{
+  "query": {
+    "match_all": {}
+  }
+}
+
+ *****************************************************************************
+
+7. Deleting documents that match a given query
+
+POST /products/_delete_by_query
+{
+  "query": {
+    "match_all": { }
+  }
+}
+
+Ignoring (counting) version conflicts
+The conflicts key may be added as a query parameter instead, i.e. ?conflicts=proceed.
+
+POST /products/_delete_by_query
+{
+  "conflicts": "proceed",
+  "query": {
+    "match_all": { }
+  }
+}
+
+*****************************************************************************
+
+8. Batch processing
+
+NDJSON format = _field
+
+1. HTTP Content-Type header should be set as follows:
+
+	1. Content-Type - application/x-ndjson
+	2. application-json is accepted but it is not the right way
+	3. Console tool & ES SDK's handles everything for us
+
+2. Each line must end with newline character
+	1. Console tool handles everything for us
+	2. Dont type /n just leave the last line empty
+
+3. A failed action will not affect other actions
+	1. Bulk API returns information of each action
+
+4. Routing is used to resolve document's shard & 
+   supports concurrency control with sequence numbers
+   and primary term
+
+
+Indexing documents
+
+POST /_bulk
+{ "index": { "_index": "products", "_id": 200 } }
+{ "name": "Espresso Machine", "price": 199, "in_stock": 5 }
+{ "create": { "_index": "products", "_id": 201 } }
+{ "name": "Milk Frother", "price": 149, "in_stock": 14 }
+
+"create" will fail if the index does not exist
+
+Updating and deleting documents
+
+POST /_bulk
+{ "update": { "_index": "products", "_id": 201 } }
+{ "doc": { "price": 129 } }
+{ "delete": { "_index": "products", "_id": 200 } }
+
+Specifying the index name in the request path
+
+POST /products/_bulk
+{ "update": { "_id": 201 } }
+{ "doc": { "price": 129 } }
+{ "delete": { "_id": 200 } }
+
+Retrieving all documents
+
+GET /products/_search
+{
+  "query": {
+    "match_all": {}
+  }
+}
+
+*****************************************************************************
+
+9. Importing data into local cluster
+
+WD should be one where data is present - "@filename.ext"
+curl -H "Content-Type: application/x-ndjson" -XPOST http://localhost:9200/products/_bulk --data-binary "@products-bulk.json"
