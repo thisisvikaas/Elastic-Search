@@ -1,0 +1,21 @@
+# Get Cluster health
+GET _cluster/health
+
+#Number of nodes
+GET _cat/node?v
+
+# Details about indices
+GET _cat/indices?v
+
+#Details about shards
+GET _cat/shards?v
+
+# Adding an index 
+PUT pages
+
+Notes:
+
+1. A cluster health is yellow when index has replica but on same node
+	1. Creating a new node will make the status green (ES places the replica on the new node created)
+	
+
