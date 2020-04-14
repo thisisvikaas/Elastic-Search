@@ -1,0 +1,49 @@
+Working of Elastic Search 
+
+*****************************************************************************
+
+Routing
+
+Deafult routing : Given a search query it uses the following formula to get to the exact shard 
+
+shard_num = hash(_routing) % num_of_primary_shards
+
+1. Ensures documents are distributed evenly across shards
+2. _routing is shown in doc results when custom routing is used
+3. One of the reasons why index shards cannot be changed is that the routing formula will yield different results
+
+
+*****************************************************************************
+
+How ES reads data?
+
+GET <command> --> Coordinating node (Node having doc) --> Routing --> Selects the shard amomg the available shards ARS (Adaptive replica selection) --> read request from coordinating node sends the result to Kibana / ES deployment sdk
+
+
+*****************************************************************************
+
+How ES write works?
+
+PUT <command> --> 1. Write request is sent to the primary shard by coordinating node
+				  2. The primary shard validates the request (type, doc etc)
+				  3. The primary shard makes the update locally & directs/distributes the replica shards to replicate the same update
+
+Failure Process:
+
+1. When a primary shard distributes the update to the 2 replica shards 
+2. Consider only 1 of the replica shard got the data and primary shard fails at that same time
+3. The other replica shard now becomes the primary shard since a replica shard cannot exist without a primary shard
+4. There is data state inconsistency between the new primary shard and the replica shard that got recently updated
+
+
+Resolution:
+
+1. Primary term - Used to identify if a replica shard has transformed to a primary shard due to the failure process explained above
+2. A Sequence number (order of operations - usually a counter increemented after each operation) is also used along with primary term to recover from a primary shard failure
+
+The above process is expensive for large indices hence ES uses global and local checkpoints
+
+Global checkpoint - For each replication group - The sequence number that all active shards with the replication group have been aligned
+Local checkpoint - For each replica shard - The sequence number for the last write operation performed
+
+*****************************************************************************
