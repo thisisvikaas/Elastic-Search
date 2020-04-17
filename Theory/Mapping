@@ -1,0 +1,347 @@
+ In Elasticsearch, mappings are used to define how documents and their fields should be stored and indexed.
+
+*****************************************************************************
+
+1. Dynamic Mapping:
+	1. When adding new documents, Elasticsearch will automatically add mappings for any fields
+	2. By default, each text field is mapped using both the “text” type and the “keyword” type.
+		1. The difference between the two, is that the “text” type is used for full-text searches,
+		2. The “keyword” type for exact matches, aggregations and such.
+
+Retrieving mapping
+GET /product/_mapping
+
+*****************************************************************************
+
+2. Metafields for _doc object - Total of 10
+
+1. _index:
+	1.This field is added to documents automatically and is used by Elasticsearch internally.
+	2. It simply contains the name of the index to which the document belongs.
+	3. This is used internally when querying documents within an index, but may also be used explicitly
+	within search queries if searching for documents within multiple indices, for instance.
+
+2. _id
+	1.The “_id” meta field unsurprisingly stores the ID of documents and can be queried within
+certain queries.
+	2.Usually you won’t need to query the field directly, but it is used when looking up documents
+based on their IDs.
+
+3. _souce
+	1.The “_source” meta field contains the original JSON object that was passed to Elasticsearch
+when indexing the document.
+	2.The field is not indexed, and therefore you cannot search it, but you can retrieve it.
+
+4. _field_names
+	1.The “_field_names” meta field contains the names of every field that contains a non-null value.
+	2.This is used with a query named “exists,” for instance, which matches documents that contain a non-null value for a given field
+
+5. _routing
+	1.If using custom routing to route documents to shards based on a specified value, then
+	this value is stored within the “_routing” meta field.
+
+6. _version
+
+	1.Elasticsearch uses versioning of documents internally with a meta field named “_version.”
+	2.If you retrieve a document by ID, this meta field will be part of the result.
+	3.The value is simply an integer which starts at one and is incremented every time we change
+
+7. _meta
+
+	1. Lastly, the “_meta” field can store custom data that is not touched in any way by Elasticsearch.
+	2. It is therefore a place where you can store whatever application specific data that you might have.
+
+*****************************************************************************
+
+3. Datatypes - https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-types.html
+
+Data types can be divided into four categories; core data types, complex data types, geo data types,
+
+Keyword - For exact matches only - mainly used for filtering, aggregating and sorting
+text type - For full text search
+
+3.1 File Coercion
+  1. Allowing different types into ES index fields 
+  eg if price is float and 7.4 was passed and later price = "7.4" the string is convereted into float yet stored as "7.4" only in _source
+  2. However coercion will only happen if it is possible to convert the string eg = "7.4m" will not be converted to 7.4 as ut contains text too
+  3. coercion is enabled by default 
+
+*****************************************************************************
+
+4. Adding mappings to existing indices
+
+1. Adding mapping for discount field
+PUT /product/_mapping
+{
+  "properties": {
+    "discount": {
+      "type": "double"
+    }
+  }
+}
+
+2. Retrieving mapping
+GET /product/_mapping
+
+*****************************************************************************
+
+5. Adding multi-fields mappings
+
+Adding mappings
+
+PUT /product/_mapping
+{
+  "properties": {
+    "description": {
+      "type": "text"
+    },
+    "name": {
+      "type": "text",
+      "fields": {
+        "keyword": {
+          "type": "keyword"
+        }
+      }
+    },
+    "tags": {
+      "type": "text",
+      "fields": {
+        "keyword": {
+          "type": "keyword"
+        }
+      }
+    }
+  }
+}
+
+*****************************************************************************
+
+
+6. Changing exisiting mappings
+
+ES does not allow to modify exisitng mappings because it will invalidate the index hence we need to delete the index and change the mapping
+
+DELETE /product
+
+|
+|
+
+PUT /product
+{
+  "mappings": {
+  
+    "properties": {
+      "in_stock": {
+        "type": "integer"
+      },
+      "is_active": {
+        "type": "boolean"
+      },
+      "price": {
+        "type": "integer"
+      },
+      "sold": {
+        "type": "long"
+      }
+    }
+  }
+}
+
+*****************************************************************************
+
+7. Mapping Parameters - Check documentation
+
+Eg properties, dynamic = false, boost, analyzer etc
+
+*****************************************************************************
+
+8. Defining custom date formats
+
+1. Date mapping with year format
+
+PUT /product/_doc/_mapping
+{
+  "properties": {
+    "created": {
+      "type": "date",
+      "format": "year"
+    }
+  }
+}
+
+2. Date mapping with strict_year format
+PUT /product/_mapping
+{
+  "properties": {
+    "created": {
+      "type": "date",
+      "format": "strict_year"
+    }
+  }
+}
+
+3. Date mapping with explicit default format
+PUT /product/_mapping
+{
+  "properties": {
+    "created": {
+      "type": "date",
+      "format": "strict_date_optional_time||epoch_millis"
+    }
+  }
+}
+
+4. Date mapping with date and optional time
+PUT /product/_mapping
+{
+  "properties": {
+    "created": {
+      "type": "date",
+      "format": "yyyy/MM/dd HH:mm:ss||yyyy/MM/dd"
+    }
+  }
+}
+
+*****************************************************************************
+
+
+9. Picking up new fields without dynamic mapping
+
+1. Adding test document
+PUT /product/_doc/2000
+{
+  "description": "Test",
+  "discount": 20
+}
+
+2. Adding mapping for discount field
+PUT /product/_mapping
+{
+  "properties": {
+    "discount": {
+      "type": "integer"
+    }
+  }
+}
+
+3. Querying the description field
+GET /product/_search
+{
+  "query": {
+    "match": {
+      "description": "Test"
+    }
+  }
+}
+
+4. Querying the discount field
+GET /product/_search
+{
+  "query": {
+    "term": {
+      "discount": 20
+    }
+  }
+}
+
+We disable dynamic mapping for discount field hence it will not match to anything and ES will not be able to use this field for search since these values will not be indexed.
+	1. dynamic = False changes it at a index level and will be done for all documents under the index
+  2. We can use both implict and explicit mappings in a doc
+
+*****************************************************************************
+
+10. Picking up new mappings for documents
+POST /product/_update_by_query?conflicts=proceed
+
+	1.It gets a snapshot of the current state of the index.
+	2.If a given document was changed between the start of a query and when the query starts to update that particular document we get a conflict because the version of the documents no longer matches if the versions match the Kery proceeds and updates the internal version of the documents i.e. the underscore version gets a field.
+
+*****************************************************************************
+
+11. Deleting the test document
+DELETE /product/_doc/2000
+
+*****************************************************************************
+
+12. Dot notation
+
+author{
+  name : {"type":"text"}
+  email: {"type":"keyword"}
+}
+
+can be written as
+
+author.name : {"type":"text"}
+author.email : {"type":"keyword"}
+
+*****************************************************************************
+
+13. Field values are optional in ES unlike DBMS where NULL needs to be explicitly specified
+
+
+*****************************************************************************
+
+14. Reindex API
+
+POST /_reindex 
+{
+source{
+  "index" : "source_index"
+},
+dest{
+    "index" : "dest_index"
+} 
+}
+
+*****************************************************************************
+
+15. Dynamic Templates & Mapping Recommendations - Check Later
+
+All data types will be mapped automatically based on what is entered
+
+
+PUT /dynamic_template_test
+{
+  "mappings":{
+    "dynamic_templates":[
+      {
+        "integers":{
+          "match_mapping_type":"long",
+          "mapping":{
+            "type":"integer"
+          }
+        }
+      }
+    ]
+  }
+}
+
+*****************************************************************************
+
+16. Mapping Recommnendation
+
+  1. doc_valeus to false if not using for filtering, aggregations & sorting
+  2. norms to false if dont need relevance scoring
+  3. index to false if dont need to filter on values
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

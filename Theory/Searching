@@ -1,0 +1,416 @@
+Query String - https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl-query-string-query.html
+
+Two ways 
+1. Reqest URI 
+2. Query DSL 
+
+*****************************************************************************
+
+Request URI 
+
+#Matches with everything
+GET /products/_search?q=name:*
+
+#Matches with entered search term
+GET /products/_search?q=field:term
+
+#Boolean logic 
+
+GET /products/_search?q=field1:term AND field2:term
+
+*****************************************************************************
+
+Query DSL
+
+Matching all documents
+GET /product/_search
+{
+  "query": {
+    "match_all": {}
+  }
+}
+
+Understanding relevance scores
+ 
+1. ES uses Okapi BM25 algorithm for releavnce scoring - 
+	1. Better at handling stop words
+	2. Improves the field length norm factor
+	3. Can be configured with parameters
+
+2. TF - IDF and FL are calculated for each doc in the index
+	1. Term Frequency - It looks at how many times a given term appears in the field that we're searching for a particular document.The more times the term appears the more relevant the document is at least for that term.
+	2. IDF - This refers to how often a term appears within the index.The more often the term appears the lower the score and relevance.The logic here is that if a term appears in many documents then it has a lower weight.This means the words that appear many times are less significant such as the words they're this if etc..
+	3. FL - Field Length - This simply refers to how long the field is the longer the field the less likely to work within the field are to be relevant.
+
+
+GET /product/_search
+{
+  "explain": true,
+  "query": {
+    "term": {
+      "name": "lobster"
+    }
+  }
+}
+
+*****************************************************************************
+
+Debugging unexpected query results
+GET /product/_doc/1/_explain
+{
+  "query": {
+    "term": {
+      "name": "lobster"
+    }
+  }
+}
+
+
+*****************************************************************************
+
+Full text queries vs term level queries
+
+Term level queries are not analyzed
+
+1. Even if Lobster is present in my document first  & third query will return results while second wont since the term level query will check in inverted index where we store in lower case using analyzers
+
+GET /product/_search
+{
+  "query": {
+    "term": {
+      "name": "lobster"
+    }
+  }
+}
+
+GET /product/_search
+{
+  "query": {
+    "term": {
+      "name": "Lobster"
+    }
+  }
+}
+
+Full-text queries are analyzed
+
+1. The full text queries are first sent to analyzer where they get lowercase etc and then searched on the inverted index
+
+GET /product/_search
+{
+  "query": {
+    "match": {
+      "name": "Lobster"
+    }
+  }
+}
+
+*****************************************************************************
+
+
+Term Level Queries 
+
+Searching for a term
+
+Matching documents with a value of true for the is_active field
+GET /product/_search
+{
+  "query": {
+    "term": {
+      "is_active": true
+    }
+  }
+}
+GET /product/_search
+{
+  "query": {
+    "term": {
+      "is_active": {
+        "value": true
+      }
+    }
+  }
+}
+
+*****************************************************************************
+
+Text level queries
+
+1. Searching multiple fields
+GET /recipe/_search
+{
+  "query": {
+    "multi_match": {
+      "query": "pasta",
+      "fields": [ "title", "description" ]
+    }
+  }
+}
+
+*****************************************************************************
+
+2. Flexible matching with match query
+Standard match query
+GET /recipe/_search
+{
+  "query": {
+    "match": {
+      "title": "Recipes with pasta or spaghetti"
+    }
+  }
+}
+
+2.1 Specifying a boolean operator
+GET /recipe/_search
+{
+  "query": {
+    "match": {
+      "title": {
+        "query": "Recipes with pasta or spaghetti",
+        "operator": "and"
+      }
+    }
+  }
+}
+
+2.2 GET /recipe/_search
+{
+  "query": {
+    "match": {
+      "title": {
+        "query": "pasta or spaghetti",
+        "operator": "and"
+      }
+    }
+  }
+}
+
+*****************************************************************************
+
+3. Matching phrases
+The order of terms matters
+GET /recipe/_search
+{
+  "query": {
+    "match_phrase": {
+      "title": "spaghetti puttanesca"
+    }
+  }
+}
+
+*****************************************************************************
+
+4. Adding Boolean Logic to Queries - bool keyword is used (equal to using where clause in SQL)
+
+1. We use must, must_not, should and filter keywords to allow boosting of relevance scores
+2. if must = covid 19 and should = india - all results having covid19 will come up and results with india will get a more relevance score
+
+Adding query clauses to the must key
+GET /recipe/_search
+{
+  "query": {
+    "bool": {
+      "must": [
+        {
+          "match": {
+            "ingredients.name": "parmesan"
+          }
+        },
+        {
+          "range": {
+            "preparation_time_minutes": {
+              "lte": 15
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+Moving the range query to the filter key
+GET /recipe/_search
+{
+  "query": {
+    "bool": {
+      "must": [
+        {
+          "match": {
+            "ingredients.name": "parmesan"
+          }
+        }
+      ],
+      "filter": [
+        {
+          "range": {
+            "preparation_time_minutes": {
+              "lte": 15
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+Adding a query clause to the must_not key
+GET /recipe/_search
+{
+  "query": {
+    "bool": {
+      "must": [
+        {
+          "match": {
+            "ingredients.name": "parmesan"
+          }
+        }
+      ],
+      "must_not": [
+        {
+          "match": {
+            "ingredients.name": "tuna"
+          }
+        }
+      ],
+      "filter": [
+        {
+          "range": {
+            "preparation_time_minutes": {
+              "lte": 15
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+Adding a query clause to the should key
+GET /recipe/_search
+{
+  "query": {
+    "bool": {
+      "must": [
+        {
+          "match": {
+            "ingredients.name": "parmesan"
+          }
+        }
+      ],
+      "must_not": [
+        {
+          "match": {
+            "ingredients.name": "tuna"
+          }
+        }
+      ],
+      "should": [
+        {
+          "match": {
+            "ingredients.name": "parsley"
+          }
+        }
+      ],
+      "filter": [
+        {
+          "range": {
+            "preparation_time_minutes": {
+              "lte": 15
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+The behavior of should query clauses depends
+GET /recipe/_search
+{
+  "query": {
+    "bool": {
+      "must": [
+        {
+          "match": {
+            "ingredients.name": "pasta"
+          }
+        }
+      ],
+      "should": [
+        {
+          "match": {
+            "ingredients.name": "parmesan"
+          }
+        }
+      ]
+    }
+  }
+}
+GET /recipe/_search
+{
+  "query": {
+    "bool": {
+      "should": [
+        {
+          "match": {
+            "ingredients.name": "parmesan"
+          }
+        }
+      ]
+    }
+  }
+}
+
+
+*****************************************************************************
+
+Debugging bool queries with named queries
+
+_matched_queries will contain the _names in the bool keywords used determining which matched and which did not
+
+GET /recipe/_search
+{
+    "query": {
+        "bool": {
+          "must": [
+            {
+              "match": {
+                "ingredients.name": {
+                  "query": "parmesan",
+                  "_name": "parmesan_must"
+                }
+              }
+            }
+          ],
+          "must_not": [
+            {
+              "match": {
+                "ingredients.name": {
+                  "query": "tuna",
+                  "_name": "tuna_must_not"
+                }
+              }
+            }
+          ],
+          "should": [
+            {
+              "match": {
+                "ingredients.name": {
+                  "query": "parsley",
+                  "_name": "parsley_should"
+                }
+              }
+            }
+          ],
+          "filter": [
+            {
+              "range": {
+                "preparation_time_minutes": {
+                  "lte": 15,
+                  "_name": "prep_time_filter"
+                }
+              }
+            }
+          ]
+        }
+    }
+}
+
+*****************************************************************************
+

@@ -1,0 +1,274 @@
+1.Using the _analyze API
+
+Tokenizing text with the standard tokenizer
+POST _analyze
+{
+  "tokenizer": "standard",
+  "text": "I'm in the mood for drinking semi-dry red wine!"
+}
+
+Using the lowercase token filter
+POST _analyze
+{
+  "filter": [ "lowercase" ],
+  "text": "I'm in the mood for drinking semi-dry red wine!"
+}
+
+Using the standard analyzer
+POST _analyze
+{
+  "analyzer": "standard",
+  "text": "I'm in the mood for drinking semi-dry red wine!"
+}
+
+*****************************************************************************
+
+2. Inverted Index 
+
+	1.For all text fields in a document inverted index will contain a table of token as index and doc1, doc2, doc3 and so on as columns with x marked if the doc contain the token. 
+	2. This makes the search of a document a simple lookup
+	3. Inverted index is created for all text fields only (One Inverted Index per Text Field)
+	4. Other data types use BKD trees
+	5. Sorted mapping of terms and maintained by Apache Lucene and is faster for looking up
+
+*****************************************************************************
+
+
+3. Field Aliases 
+
+	1. No need to reindex 
+	2. Now comment can be used in the place of content
+	3. Similar to field aliases ES also supports index aliases
+			POST /_aliases
+			{
+			    "actions" : [
+			        { "add" : { "index" : "twitter", "alias" : "alias1" } }
+			    ]
+			}
+
+----------------------------------------------------------------------------
+
+PUT /reviews/mappings
+{
+	"properties"{
+		"content"{
+			"type":"alias"
+			"path":"comment"
+		}
+	}
+}
+
+*****************************************************************************
+
+4. Index templates 
+
+	1. A template can be created for future indices and the same will be followed for any data that comes into the system (Time series data)
+	2. Mappings and Setting for all matching index patterns will automaticlky be done
+	3. Retrive template - GET /_template/acess-logs
+	4. Delete template - DELETE /_template/acess-logs
+
+PUT /_template/access-logs
+{
+	"index-patterns":["access-log-*"]  //A * is a wildcard here meaning anything can come
+	"settings":{
+		"number_of_shards":2
+		"index.mapping.coerce":false
+	}
+	"mappings":{
+		"properties":{
+			"field1"{
+				"type": "text"
+			},
+			"field2"{
+				"type": "long"
+			}
+		}
+	}
+}
+
+Using PUT /access-log-2020-10-01 will automatically create the mapping
+
+************************************************************************
+
+5. Stemming & Stop Words
+
+1. Stemming reduces to reduce the word to root word. ES uses internally and stems words on analyzing
+	1. {
+		"properties"{
+			"description"{
+				"type":"text"
+				"analyzer":"stemming_analyzer"
+			}
+		}
+	}
+2. Stop words provide little to no value in relevance scoring. We usually remove such words.
+
+************************************************************************
+
+6. Built in Analyzers
+
+1. standard 
+
+	1. Splits text at word boundaries and removes punctuation
+		-Done by standrd tokenizer
+	2. Lowercases letters with lowercase token filter
+	3. Contains stop token filter (disabled by default) - stop words
+
+2. simple
+	- Simple to standrd
+
+3. whitespace 
+
+4. keyword 
+		- used for exact matching
+		- outputs text as a single token
+5. pattern
+		- regular express to match token seperators
+
+6. Language analyzers
+
+Configuring the standard analyzer
+PUT /analyzers_test
+{
+  "settings": {
+    "analysis": {
+      "analyzer": {
+        "english_stop": {
+          "type": "standard",
+          "stopwords": "_english_"
+        }
+      },
+      "filter": {
+        "my_stemmer": {
+          "type": "stemmer",
+          "name": "english"
+        }
+      }
+    }
+  }
+}
+
+Testing the custom analyzer
+POST /analyzers_test/_analyze
+{
+  "analyzer": "english_stop",
+  "text": "I'm in the mood for drinking semi-dry red wine!"
+}
+
+POST /analyzers_test/_analyze
+{
+  "tokenizer": "standard",
+  "filter": [ "my_stemmer" ],
+  "text": "I'm in the mood for drinking semi-dry red wine!"
+}
+
+************************************************************************
+
+Creating custom analyzers
+Adding a custom analyzer
+PUT /analyzers_test
+{
+  "settings": {
+    "analysis": {
+      "filter": {
+        "my_stemmer": {
+          "type": "stemmer",
+          "name": "english"
+        }
+      },
+      "analyzer": {
+        "english_stop": {
+          "type": "standard",
+          "stopwords": "_english_"
+        },
+        "my_analyzer": {
+          "type": "custom",
+          "tokenizer": "standard",
+          "char_filter": [
+            "html_strip"
+          ],
+          "filter": [
+            "lowercase",
+            "trim",
+            "my_stemmer"
+          ]
+        }
+      }
+    }
+  }
+}
+Testing the custom analyzer
+POST /analyzers_test/_analyze
+{
+  "analyzer": "my_analyzer",
+  "text": "I'm in the mood for drinking <strong>semi-dry</strong> red wine!"
+}
+
+************************************************************************
+
+Adding analyzer to existing indices 
+
+1. We need to first close the index 
+
+POST /index-name/close
+
+2. Add the analyzer 
+
+
+PUT /analyzers_test
+{
+  "settings": {
+    "analysis": {
+      "analyzer": {
+        "my_analyzer": {
+          "type": "custom",
+          "tokenizer": "standard",
+          "char_filter": [
+            "html_strip"
+          ],
+          "filter": [
+            "lowercase",
+            "trim",
+            "my_stemmer"
+          ]
+        }
+      }
+    }
+  }
+}
+
+
+3. Open the index (Open index is available to indexing and search request while a closed one will refuse requests)
+
+POST /index-name/close
+
+4. verify the settings
+
+GET /index-name/settings
+
+************************************************************************
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
